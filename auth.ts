@@ -1,10 +1,10 @@
-import NextAuth from 'next-auth';
-import { authConfig } from './auth.config';
-import Credentials from 'next-auth/providers/credentials';
-import { z } from 'zod';
-import bcrypt from 'bcryptjs';
-import dbConnect from '@/lib/db';
-import User from '@/models/User';
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
+import Credentials from "next-auth/providers/credentials";
+import { z } from "zod";
+import bcrypt from "bcryptjs";
+import dbConnect from "@/lib/db";
+import User from "@/models/User";
 
 async function getUser(username: string) {
   try {
@@ -12,8 +12,8 @@ async function getUser(username: string) {
     const user = await User.findOne({ username });
     return user;
   } catch (error) {
-    console.error('Failed to fetch user:', error);
-    throw new Error('Failed to fetch user.');
+    console.error("Failed to fetch user:", error);
+    throw new Error("Failed to fetch user.");
   }
 }
 
@@ -34,7 +34,7 @@ export const { auth, signIn, signOut } = NextAuth({
           if (passwordsMatch) return user;
         }
 
-        console.log('Invalid credentials');
+        console.log("Invalid credentials");
         return null;
       },
     }),

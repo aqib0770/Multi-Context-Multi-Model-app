@@ -1,4 +1,3 @@
-
 import { deletePointFromCollection } from "@/lib/vector-store";
 import { auth } from "@/auth";
 import dbConnect from "@/lib/db";
@@ -7,7 +6,7 @@ import Chat from "@/models/Chat";
 export async function POST(req: Request) {
   const session = await auth();
   if (!session || !session.user) {
-      return new Response('Unauthorized', { status: 401 });
+    return new Response("Unauthorized", { status: 401 });
   }
 
   const { fileName, chatId } = await req.json();
@@ -21,14 +20,14 @@ export async function POST(req: Request) {
 
   try {
     await deletePointFromCollection(fileName, chatId);
-    
+
     await dbConnect();
     await Chat.findByIdAndUpdate(chatId, {
-        $pull: {
-            sources: {
-                name: fileName
-            }
-        }
+      $pull: {
+        sources: {
+          name: fileName,
+        },
+      },
     });
 
     return new Response("Document deleted", { status: 200 });

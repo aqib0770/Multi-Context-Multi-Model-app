@@ -1,9 +1,9 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const MessageSchema = new mongoose.Schema({
   role: {
     type: String,
-    enum: ['user', 'assistant'],
+    enum: ["user", "assistant"],
     required: true,
   },
   content: {
@@ -18,22 +18,25 @@ const MessageSchema = new mongoose.Schema({
 
 const SourceSchema = new mongoose.Schema({
   name: String,
-  type: String, 
-  url: String, 
+  type: String,
+  url: String,
 });
 
-const ChatSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
+const ChatSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    title: {
+      type: String,
+      default: "New Chat",
+    },
+    messages: [MessageSchema],
+    sources: [SourceSchema],
   },
-  title: {
-    type: String,
-    default: 'New Chat',
-  },
-  messages: [MessageSchema],
-  sources: [SourceSchema],
-}, { timestamps: true });
+  { timestamps: true },
+);
 
-export default mongoose.models.Chat || mongoose.model('Chat', ChatSchema);
+export default mongoose.models.Chat || mongoose.model("Chat", ChatSchema);
