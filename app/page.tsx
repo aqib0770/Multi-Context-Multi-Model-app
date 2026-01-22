@@ -3,6 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { useState, useRef, useEffect } from "react";
 import { signOut } from "next-auth/react";
+import { AVAILABLE_MODELS, DEFAULT_MODEL } from "@/lib/models";
 import { DefaultChatTransport } from "ai";
 
 type Chat = {
@@ -176,8 +177,8 @@ function ChatInterface({ chatId }: { chatId: string }) {
   const [input, setInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
 
-  // Initial load of messages
   const [initialMessages, setInitialMessages] = useState<any[]>([]);
 
   useEffect(() => {
@@ -214,7 +215,6 @@ function ChatInterface({ chatId }: { chatId: string }) {
       setIsLoading(false);
     },
   });
-
   useEffect(() => {
     if (initialMessages.length > 0) {
       setMessages(initialMessages);
@@ -311,8 +311,10 @@ function ChatInterface({ chatId }: { chatId: string }) {
     };
 
     setIsLoading(true);
-    // @ts-ignore
-    await sendMessage(userMessage);
+    // @ts-ignore - Pass model in request options
+    await sendMessage(userMessage, {
+      body: { model: selectedModel },
+    });
     setInput("");
   };
 
@@ -507,7 +509,7 @@ function ChatInterface({ chatId }: { chatId: string }) {
               onSubmit={handleSend}
               className="p-4 border-t border-gray-200 dark:border-gray-700"
             >
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
                 <input
                   className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800 dark:text-gray-100"
                   value={input}
@@ -515,6 +517,18 @@ function ChatInterface({ chatId }: { chatId: string }) {
                   onChange={(e) => setInput(e.target.value)}
                   disabled={isLoading}
                 />
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="px-3 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800 dark:text-gray-100 text-sm"
+                  disabled={isLoading}
+                >
+                  {AVAILABLE_MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="submit"
                   disabled={isLoading || !input.trim()}
