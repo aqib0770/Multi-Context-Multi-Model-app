@@ -1,5 +1,4 @@
 import { streamText, UIMessage, convertToModelMessages } from "ai";
-import { google } from "@ai-sdk/google";
 import { queryVectorStore } from "@/lib/vector-store";
 import { auth } from "@/auth";
 import dbConnect from "@/lib/db";
@@ -10,10 +9,11 @@ export async function POST(req: Request) {
   if (!session || !session.user) {
     return new Response("Unauthorized", { status: 401 });
   }
-  const { messages, chatId } = await req.json();
+  const { messages, chatId, model } = await req.json();
   if (!chatId) {
     return new Response("Chat ID is required", { status: 400 });
   }
+  const selectedModel = model || "mistral/mistral-nemo";
 
   const lastMessage = messages[messages.length - 1];
   const userQuery =
@@ -36,7 +36,6 @@ export async function POST(req: Request) {
 
   try {
     await dbConnect();
-    console.log("User message saved to DB connected");
     await Chat.findByIdAndUpdate(chatId, {
       $push: {
         messages: {
@@ -51,7 +50,7 @@ export async function POST(req: Request) {
   }
 
   const result = streamText({
-    model: google("gemini-2.5-flash"),
+    model: selectedModel,
     system:
       "You are a helpful assistant. Answer the user's questions based on the provided context from uploaded documents. If no context is provided, answer based on your general knowledge.",
     messages: await convertToModelMessages(messages),
