@@ -21,10 +21,8 @@ export async function POST(req: Request) {
   }
 
   const fileObject = file as File;
-  // Use chatId as collectionName
   await embedPDF(fileObject, fileObject.name, chatId);
 
-  // Save source info to MongoDB
   try {
     await dbConnect();
     await Chat.findByIdAndUpdate(chatId, {
@@ -32,7 +30,6 @@ export async function POST(req: Request) {
         sources: {
           name: fileObject.name,
           type: "pdf",
-          // url could be stored if we were uploading to S3, here we just track name
         },
       },
     });
