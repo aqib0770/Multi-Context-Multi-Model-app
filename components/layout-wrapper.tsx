@@ -3,8 +3,10 @@
 import { usePathname } from "next/navigation"
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
+import { SessionProvider } from "next-auth/react"
+import { Session } from "next-auth"
 
-export function LayoutWrapper({ children }: { children: React.ReactNode }) {
+export function LayoutWrapper({ children, session }: { children: React.ReactNode, session: Session | null }) {
   const pathname = usePathname()
   const isLoginPage = pathname === "/login"
 
@@ -13,7 +15,8 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SidebarProvider>
+    <SessionProvider session={session}>
+      <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
         <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
@@ -24,6 +27,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </SidebarInset>
-    </SidebarProvider>
+      </SidebarProvider>
+    </SessionProvider>
   )
 }

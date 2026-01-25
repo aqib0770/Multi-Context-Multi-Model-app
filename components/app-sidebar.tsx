@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { signOut } from "next-auth/react"
-import { PlusCircle, MessageSquare, LogOut, Trash2 } from "lucide-react"
+import { signOut, useSession } from "next-auth/react"
+import { PlusCircle, MessageSquare, LogOut, Trash2, User2, ChevronUp } from "lucide-react"
 import Link from "next/link"
 import {
   Sidebar,
@@ -18,7 +18,14 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 type Chat = {
   _id: string
@@ -30,9 +37,11 @@ export function AppSidebar() {
   const [chats, setChats] = useState<Chat[]>([])
   const router = useRouter()
   const pathname = usePathname()
-
   const currentChatId = pathname?.startsWith("/c/") ? pathname.split("/c/")[1] : null
 
+  const { data: session } = useSession()
+  const name = session?.user?.name
+  const image = session?.user?.image
   useEffect(() => {
     fetchChats()
 
@@ -153,15 +162,25 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={async () => {
-                await signOut({ redirectTo: "/login" })
-              }}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Sign Out</span>
-            </SidebarMenuButton>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton variant="outline">
+                    <Avatar>
+  <AvatarImage src={image || ""} />
+  <AvatarFallback>{name?.charAt(0)}</AvatarFallback>
+</Avatar> {name}
+                    
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  side="top"
+                  className="w-[--radix-popper-anchor-width]"
+                >
+                  <DropdownMenuItem onClick={() => signOut()}>
+                    <span>Sign out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

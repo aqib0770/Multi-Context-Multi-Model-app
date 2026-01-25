@@ -1,4 +1,5 @@
 import { LayoutWrapper } from "@/components/layout-wrapper"
+import { auth } from "@/auth"
 import "./globals.css"
 
 export const metadata = {
@@ -6,11 +7,12 @@ export const metadata = {
   description: "AI-powered notebook with RAG capabilities",
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth()
   return (
     <html lang="en" className="dark">
       <body>
-        <LayoutWrapper>{children}</LayoutWrapper>
+        <LayoutWrapper session={session}>{children}</LayoutWrapper>
       </body>
     </html>
   )
