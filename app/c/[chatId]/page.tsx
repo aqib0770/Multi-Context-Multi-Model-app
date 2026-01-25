@@ -1,71 +1,16 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, use } from "react";
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from "@/lib/models";
 import { DefaultChatTransport } from "ai";
-import { PlusCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
-export default function ChatPage() {
-  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Listen for chat selection events from the sidebar
-    const handleChatSelected = (e: CustomEvent<string>) => {
-      setCurrentChatId(e.detail);
-    };
-
-    window.addEventListener("chatSelected", handleChatSelected as EventListener);
-    return () => {
-      window.removeEventListener("chatSelected", handleChatSelected as EventListener);
-    };
-  }, []);
-
-  const createNewChat = async () => {
-    try {
-      const res = await fetch("/api/chats", { method: "POST" });
-      if (res.ok) {
-        const newChat = await res.json();
-        setCurrentChatId(newChat._id);
-        // Notify sidebar of the new chat
-        window.dispatchEvent(new CustomEvent("chatCreated", { detail: newChat }));
-      }
-    } catch (error) {
-      console.error("Failed to create chat", error);
-    }
-  };
-
+export default function ChatPage({ params }: { params: Promise<{ chatId: string }> }) {
+  const { chatId } = use(params);
+  
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Content Area */}
-      {currentChatId ? (
-        <ChatInterface key={currentChatId} chatId={currentChatId} />
-      ) : (
-        <div className="flex items-center justify-center h-full w-full text-muted-foreground">
-          <div className="text-center max-w-md px-4">
-            <div className="flex justify-center mb-6">
-              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <PlusCircle className="h-8 w-8 text-primary" />
-              </div>
-            </div>
-            <h2 className="text-2xl font-bold mb-3 text-foreground">
-              Welcome to NotebookLM Clone
-            </h2>
-            <p className="mb-6 text-muted-foreground">
-              Select a chat from the sidebar or create a new one to get started with AI-powered document analysis.
-            </p>
-            <Button
-              onClick={createNewChat}
-              size="lg"
-              className="gap-2"
-            >
-              <PlusCircle className="h-5 w-5" />
-              Create New Chat
-            </Button>
-          </div>
-        </div>
-      )}
+      <ChatInterface key={chatId} chatId={chatId} />
     </div>
   );
 }
@@ -222,8 +167,8 @@ function ChatInterface({ chatId }: { chatId: string }) {
       <div className="flex flex-col flex-1 h-full max-w-6xl mx-auto w-full p-4 lg:p-6 gap-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
           <div className="lg:col-span-1 flex flex-col gap-4 max-h-full overflow-y-auto">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">
+            <div className="bg-card rounded-2xl shadow-sm p-6 border border-border">
+              <h2 className="text-xl font-semibold mb-4 text-foreground">
                 Sources
               </h2>
 
@@ -241,7 +186,7 @@ function ChatInterface({ chatId }: { chatId: string }) {
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
-                  className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-600 rounded-xl p-3 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all font-medium text-sm"
+                  className="w-full flex items-center justify-center gap-2 border border-border rounded-xl p-3 text-muted-foreground hover:bg-accent transition-all font-medium text-sm"
                 >
                   {isUploading ? (
                     <span>Uploading...</span>
@@ -269,7 +214,7 @@ function ChatInterface({ chatId }: { chatId: string }) {
                   <input
                     type="url"
                     placeholder="Add URL source..."
-                    className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                     onKeyDown={async (e) => {
                       if (e.key === "Enter") {
                         const target = e.target as HTMLInputElement;
@@ -291,7 +236,7 @@ function ChatInterface({ chatId }: { chatId: string }) {
                       }
                     }}
                     disabled={isUploading}
-                    className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50"
+                    className="bg-primary text-primary-foreground px-3 py-2 rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50"
                   >
                     Add
                   </button>
@@ -302,7 +247,7 @@ function ChatInterface({ chatId }: { chatId: string }) {
                 {uploadedFiles.map((file, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between gap-2 p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm text-gray-700 dark:text-gray-300 group"
+                    className="flex items-center justify-between gap-2 p-2 bg-accent/50 rounded-lg text-sm text-foreground group"
                   >
                     <div className="flex items-center gap-2 truncate flex-1 leading-tight">
                       {file.startsWith("http") ? (
@@ -334,7 +279,7 @@ function ChatInterface({ chatId }: { chatId: string }) {
                     </div>
                     <button
                       onClick={() => handleDeleteSource(file)}
-                      className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                      className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity p-1"
                       title="Delete source"
                     >
                       <svg
@@ -357,10 +302,10 @@ function ChatInterface({ chatId }: { chatId: string }) {
             </div>
           </div>
 
-          <div className="lg:col-span-2 flex flex-col h-full bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="lg:col-span-2 flex flex-col h-full bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                   <p>No messages yet. Start the conversation!</p>
                 </div>
               )}
@@ -372,8 +317,8 @@ function ChatInterface({ chatId }: { chatId: string }) {
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                       message.role === "user"
-                        ? "bg-indigo-600 text-white"
-                        : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-accent text-foreground"
                     }`}
                   >
                     {/* @ts-ignore */}
@@ -397,7 +342,7 @@ function ChatInterface({ chatId }: { chatId: string }) {
               ))}
               {isLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-gray-100 dark:bg-gray-700 rounded-2xl px-4 py-3">
+                  <div className="bg-accent rounded-2xl px-4 py-3 text-foreground">
                     Typing...
                   </div>
                 </div>
@@ -406,11 +351,11 @@ function ChatInterface({ chatId }: { chatId: string }) {
 
             <form
               onSubmit={handleSend}
-              className="p-4 border-t border-gray-200 dark:border-gray-700"
+              className="p-4 border-t border-border"
             >
               <div className="flex gap-2 items-center">
                 <input
-                  className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800 dark:text-gray-100"
+                  className="flex-1 px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
                   value={input}
                   placeholder="Type a message..."
                   onChange={(e) => setInput(e.target.value)}
@@ -419,7 +364,7 @@ function ChatInterface({ chatId }: { chatId: string }) {
                 <select
                   value={selectedModel}
                   onChange={(e) => setSelectedModel(e.target.value)}
-                  className="px-3 py-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800 dark:text-gray-100 text-sm"
+                  className="px-3 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm"
                   disabled={isLoading}
                 >
                   {AVAILABLE_MODELS.map((model) => (
@@ -431,7 +376,7 @@ function ChatInterface({ chatId }: { chatId: string }) {
                 <button
                   type="submit"
                   disabled={isLoading || !input.trim()}
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                  className="px-6 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
                 >
                   Send
                 </button>
