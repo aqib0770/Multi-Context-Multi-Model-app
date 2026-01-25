@@ -1,8 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter, usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
-import { PlusCircle, MessageSquare, LogOut } from "lucide-react"
+import { PlusCircle, MessageSquare, LogOut, Trash2 } from "lucide-react"
+import Link from "next/link"
 import {
   Sidebar,
   SidebarContent,
@@ -12,6 +14,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
@@ -25,15 +28,16 @@ type Chat = {
 
 export function AppSidebar() {
   const [chats, setChats] = useState<Chat[]>([])
-  const [currentChatId, setCurrentChatId] = useState<string | null>(null)
+  const router = useRouter()
+  const pathname = usePathname()
+
+  const currentChatId = pathname?.startsWith("/c/") ? pathname.split("/c/")[1] : null
 
   useEffect(() => {
     fetchChats()
 
-    // Listen for chats created from the main page
     const handleChatCreated = (e: CustomEvent<Chat>) => {
       setChats(prev => [e.detail, ...prev])
-      setCurrentChatId(e.detail._id)
     }
 
     window.addEventListener("chatCreated", handleChatCreated as EventListener)
@@ -48,11 +52,6 @@ export function AppSidebar() {
       if (res.ok) {
         const data = await res.json()
         setChats(data)
-        if (data.length > 0 && !currentChatId) {
-          setCurrentChatId(data[0]._id)
-          // Dispatch event to notify page of chat selection
-          window.dispatchEvent(new CustomEvent("chatSelected", { detail: data[0]._id }))
-        }
       }
     } catch (error) {
       console.error("Failed to fetch chats", error)
@@ -65,17 +64,33 @@ export function AppSidebar() {
       if (res.ok) {
         const newChat = await res.json()
         setChats([newChat, ...chats])
-        setCurrentChatId(newChat._id)
-        window.dispatchEvent(new CustomEvent("chatSelected", { detail: newChat._id }))
+      router.push(`/c/${newChat._id}`)
       }
     } catch (error) {
       console.error("Failed to create chat", error)
     }
   }
 
-  const handleChatSelect = (chatId: string) => {
-    setCurrentChatId(chatId)
-    window.dispatchEvent(new CustomEvent("chatSelected", { detail: chatId }))
+  const deleteChat = async (chatId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (!confirm("Are you sure you want to delete this chat?")) return
+
+    try {
+      const res = await fetch(`/api/chats/${chatId}`, { method: "DELETE" })
+      if (res.ok) {
+        setChats(prev => prev.filter(c => c._id !== chatId))
+      if (currentChatId === chatId) {
+        router.push("/")
+      }
+    } else {
+        alert("Failed to delete chat")
+      }
+    } catch (error) {
+      console.error("Failed to delete chat", error)
+      alert("Failed to delete chat")
+    }
   }
 
   return (
@@ -108,13 +123,22 @@ export function AppSidebar() {
               {chats.map((chat) => (
                 <SidebarMenuItem key={chat._id}>
                   <SidebarMenuButton
-                    onClick={() => handleChatSelect(chat._id)}
+                    asChild
                     isActive={currentChatId === chat._id}
-                    className="truncate"
                   >
-                    <MessageSquare className="h-4 w-4" />
-                    <span className="truncate">{chat.title}</span>
+                    <Link href={`/c/${chat._id}`}>
+                      <MessageSquare className="h-4 w-4" />
+                      <span className="truncate">{chat.title}</span>
+                    </Link>
                   </SidebarMenuButton>
+                  <SidebarMenuAction
+                    onClick={(e) => deleteChat(chat._id, e)}
+                    showOnHover
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Delete chat</span>
+                  </SidebarMenuAction>
                 </SidebarMenuItem>
               ))}
               {chats.length === 0 && (
