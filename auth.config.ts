@@ -9,16 +9,15 @@ export const authConfig = {
       const isLoggedIn = !!auth?.user;
       const isOnDashboard = nextUrl.pathname.startsWith("/");
       const isOnLogin = nextUrl.pathname.startsWith("/login");
-      const isOnRegister = nextUrl.pathname.startsWith("/register");
 
-      if (isOnLogin || isOnRegister) {
+      if (isOnLogin) {
         if (isLoggedIn) return Response.redirect(new URL("/", nextUrl));
         return true;
       }
 
       if (isOnDashboard) {
         if (isLoggedIn) return true;
-        return false; // Redirect unauthenticated users to login page
+        return false;
       }
       return true;
     },

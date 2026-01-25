@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
     const chats = await Chat.find({ userId: session.user.id }).sort({
       updatedAt: -1,
     });
+    console.log("Chats",chats);
     return NextResponse.json(chats);
   } catch (error) {
     console.error("Error fetching chats:", error);
