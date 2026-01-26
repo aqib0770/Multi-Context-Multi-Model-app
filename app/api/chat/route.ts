@@ -1,8 +1,13 @@
-import { streamText, UIMessage, convertToModelMessages } from "ai";
+import { streamText } from "ai";
 import { queryVectorStore } from "@/lib/vector-store";
 import { auth } from "@/auth";
 import dbConnect from "@/lib/db";
 import Chat from "@/models/Chat";
+import {
+  addMemory,
+  searchMemories,
+  formatMemoriesAsContext,
+} from "@/lib/memory";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -14,26 +19,48 @@ export async function POST(req: Request) {
     return new Response("Chat ID is required", { status: 400 });
   }
   const selectedModel = model || "mistral/mistral-nemo";
-
+  console.log("Messages received:", messages.length);
+  
   const lastMessage = messages[messages.length - 1];
   const userQuery =
     lastMessage.parts.find((part: any) => part.type === "text")?.text || "";
 
-  let contextText = "";
+  try {
+    await addMemory(userQuery, chatId, "user");
+    console.log("User query added to memory");
+  } catch (error) {
+    console.error("Failed to add user query to memory:", error);
+  }
+
+  let memoryContext = "";
+  try {
+    const relevantMemories = await searchMemories(userQuery, chatId, 5);
+    memoryContext = formatMemoriesAsContext(relevantMemories);
+    console.log("Memory context:", memoryContext);
+  } catch (error) {
+    console.error("Failed to search memories:", error);
+  }
+
+  let documentContext = "";
   try {
     const contextDocs = await queryVectorStore(userQuery, 4, chatId);
-    contextText = contextDocs.map((doc) => doc.pageContent).join("\n---\n");
+    documentContext = contextDocs.map((doc) => doc.pageContent).join("\n---\n");
   } catch (error) {
     console.error("Vector store query error:", error);
   }
 
-  if (contextText && lastMessage.parts[0].type === "text") {
-    const contextPrompt = `Context from uploaded documents:${contextText}
-        User question: ${lastMessage.parts[0].text}`;
-
-    lastMessage.parts[0].text = contextPrompt;
+  let contextSection = "";
+  if (memoryContext) {
+    contextSection += memoryContext + "\n\n";
+  }
+  if (documentContext) {
+    contextSection += `Context from uploaded documents:\n${documentContext}\n\n`;
   }
 
+ 
+  const promptWithContext = contextSection
+    ? `${contextSection}User question: ${userQuery}`
+    : userQuery;
   try {
     await dbConnect();
     await Chat.findByIdAndUpdate(chatId, {
@@ -48,12 +75,17 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Error saving user message to DB", error);
   }
-
+  console.log("Prompt with context:", promptWithContext);
   const result = streamText({
     model: selectedModel,
     system:
-      "You are a helpful assistant. Answer the user's questions based on the provided context from uploaded documents. If no context is provided, answer based on your general knowledge.",
-    messages: await convertToModelMessages(messages),
+      "You are a helpful assistant. Answer the user's questions based on the provided context which may include memories from previous conversations and content from uploaded documents. If no relevant context is provided, don't answer the question. Be conversational and helpful.",
+    messages: [
+      {
+        role: "user",
+        content: promptWithContext,
+      },
+    ],
     onFinish: async (result) => {
       try {
         await dbConnect();
@@ -67,6 +99,13 @@ export async function POST(req: Request) {
         });
       } catch (error) {
         console.error("Error saving assistant message to DB", error);
+      }
+
+      try {
+        await addMemory(result.text, chatId, "assistant");
+        console.log("Assistant response added to memory");
+      } catch (error) {
+        console.error("Failed to add assistant response to memory:", error);
       }
     },
   });
