@@ -16,28 +16,26 @@ export function getMemoryClient(): MemoryClient {
 export async function addMemory(
   content: string,
   chatId: string,
-  role: "user" | "assistant" = "user"
+  role: "user" | "assistant" = "user",
 ): Promise<Memory[]> {
-  const client = getMemoryClient();
-  const messages: Message[] = [{ role, content }];
-
   try {
+    const client = getMemoryClient();
+    const messages: Message[] = [{ role, content }];
     const result = await client.add(messages, { user_id: chatId });
     console.log(`Memory added for chat ${chatId}:`, result);
     return result;
   } catch (error) {
     console.error("Error adding memory:", error);
-    throw error;
+    return [];
   }
 }
 export async function searchMemories(
   query: string,
   chatId: string,
-  limit: number = 5
+  limit: number = 5,
 ): Promise<Memory[]> {
-  const client = getMemoryClient();
-
   try {
+    const client = getMemoryClient();
     const results = await client.search(query, {
       user_id: chatId,
       limit,
