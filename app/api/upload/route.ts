@@ -21,21 +21,35 @@ export async function POST(req: Request) {
   }
 
   const fileObject = file as File;
-  await embedPDF(fileObject, fileObject.name, chatId);
 
-  try {
-    await dbConnect();
-    await Chat.findByIdAndUpdate(chatId, {
-      $push: {
-        sources: {
-          name: fileObject.name,
-          type: "pdf",
-        },
-      },
-    });
-  } catch (error) {
-    console.error("Error saving source to DB", error);
+  if (fileObject.type !== "application/pdf") {
+    return new Response("Only PDF files are allowed", { status: 400 });
   }
 
-  return new Response("PDF indexed", { status: 200 });
+  if (fileObject.size > 10 * 1024 * 1024) {
+    return new Response("File size exceeds 10MB limit", { status: 400 });
+  }
+
+  try {
+    await embedPDF(fileObject, fileObject.name, chatId);
+
+    try {
+      await dbConnect();
+      await Chat.findByIdAndUpdate(chatId, {
+        $push: {
+          sources: {
+            name: fileObject.name,
+            type: "pdf",
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Error saving source to DB", error);
+    }
+
+    return new Response("PDF indexed", { status: 200 });
+  } catch (error) {
+    console.error("Error embedding PDF:", error);
+    return new Response("Failed to process PDF", { status: 500 });
+  }
 }
