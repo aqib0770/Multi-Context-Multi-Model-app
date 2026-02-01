@@ -18,7 +18,7 @@ export function LayoutWrapper({ children, session }: { children: React.ReactNode
     <SessionProvider session={session}>
       <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="h-svh overflow-hidden">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
           <div className="font-semibold text-lg">NotebookLM Clone</div>

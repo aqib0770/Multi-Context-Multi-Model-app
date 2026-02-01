@@ -1,13 +1,79 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useState, useRef, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from "@/lib/models";
 import { DefaultChatTransport } from "ai";
 
-export default function ChatPage({ params }: { params: Promise<{ chatId: string }> }) {
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageAction,
+  MessageActions,
+  MessageContent,
+  MessageResponse,
+  MessageToolbar,
+} from "@/components/ai-elements/message";
+import {
+  ModelSelector,
+  ModelSelectorContent,
+  ModelSelectorEmpty,
+  ModelSelectorGroup,
+  ModelSelectorInput,
+  ModelSelectorItem,
+  ModelSelectorList,
+  ModelSelectorLogo,
+  ModelSelectorLogoGroup,
+  ModelSelectorName,
+  ModelSelectorTrigger,
+} from "@/components/ai-elements/model-selector";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputButton,
+  PromptInputFooter,
+  type PromptInputMessage,
+  PromptInputProvider,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  CheckIcon,
+  CopyIcon,
+  FileIcon,
+  FolderIcon,
+  LinkIcon,
+  Loader2Icon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react";
+
+interface Source {
+  name: string;
+  type: "pdf" | "url";
+}
+
+export default function ChatPage({
+  params,
+}: {
+  params: Promise<{ chatId: string }>;
+}) {
   const { chatId } = use(params);
-  
+
   return (
     <div className="flex h-full overflow-hidden">
       <ChatInterface key={chatId} chatId={chatId} />
@@ -15,15 +81,22 @@ export default function ChatPage({ params }: { params: Promise<{ chatId: string 
   );
 }
 
-function ChatInterface({ chatId }: { chatId: string }) {
-  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [input, setInput] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  parts?: { type: "text"; text: string }[];
+}
 
-  const [initialMessages, setInitialMessages] = useState<any[]>([]);
+function ChatInterface({ chatId }: { chatId: string }) {
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [initialMessages, setInitialMessages] = useState<ChatMessage[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loadChat = async () => {
@@ -31,15 +104,16 @@ function ChatInterface({ chatId }: { chatId: string }) {
         const res = await fetch(`/api/chats/${chatId}`);
         if (res.ok) {
           const data = await res.json();
-          const uiMessages = data.messages.map((msg: any) => ({
+          const uiMessages: ChatMessage[] = data.messages.map((msg: any) => ({
             id: msg._id,
             role: msg.role,
             content: msg.content,
             parts: [{ type: "text", text: msg.content }],
           }));
           setInitialMessages(uiMessages);
-          const sources = data.sources.map((s: any) => s.name);
-          setUploadedFiles(sources);
+          if (data.sources) {
+            setSources(data.sources);
+          }
         }
       } catch (error) {
         console.error("Failed to load chat details", error);
@@ -55,27 +129,51 @@ function ChatInterface({ chatId }: { chatId: string }) {
         chatId: chatId,
       },
     }),
-    onFinish: () => {
-      setIsLoading(false);
-    },
+    onFinish: () => {},
   });
+
   useEffect(() => {
     if (initialMessages.length > 0) {
-      setMessages(initialMessages);
+      setMessages(initialMessages as any);
     }
   }, [initialMessages, setMessages]);
 
-  useEffect(() => {
-    if (status === "streaming" || status === "submitted") {
-      setIsLoading(true);
-    } else {
-      setIsLoading(false);
-    }
-  }, [status]);
+  const getMessageText = (message: (typeof messages)[0]) => {
+    const textPart = message.parts.find((part) => part.type === "text");
+    return textPart?.type === "text" ? textPart.text : "";
+  };
 
-  const handleFileUpload = async (file: File) => {
+  const handleCopy = (content: string) => {
+    navigator.clipboard.writeText(content);
+  };
+
+  const handleSend = async (message: PromptInputMessage) => {
+    const text = message.text;
+    if (!text.trim()) return;
+
+    const userMessage = {
+      role: "user",
+      content: text,
+      parts: [{ type: "text", text: text }],
+    };
+
+    // @ts-ignore
+    await sendMessage(userMessage, {
+      body: { model: selectedModel },
+    });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     if (!file.type.includes("pdf")) {
       alert("Please upload a PDF file");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File size exceeds 10MB limit");
       return;
     }
 
@@ -85,37 +183,45 @@ function ChatInterface({ chatId }: { chatId: string }) {
     formData.append("chatId", chatId);
 
     try {
-      const response = await fetch("/api/upload", {
+      const res = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });
 
-      if (response.ok) {
-        setUploadedFiles((prev) => [...prev, file.name]);
+      if (res.ok) {
+        setSources((prev) => [...prev, { name: file.name, type: "pdf" }]);
       } else {
-        alert("Upload failed");
+        const error = await res.text();
+        alert(`Upload failed: ${error}`);
       }
     } catch (error) {
       console.error("Upload error:", error);
       alert("Upload failed");
     } finally {
       setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
-  const handleUrlUpload = async (url: string) => {
-    if (!url) return;
+  const handleUrlUpload = async () => {
+    if (!urlInput.trim()) return;
+
     setIsUploading(true);
     try {
       const res = await fetch("/api/upload/url", {
         method: "POST",
-        body: JSON.stringify({ url, chatId }),
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlInput, chatId }),
       });
+
       if (res.ok) {
-        setUploadedFiles((prev) => [...prev, url]);
+        setSources((prev) => [...prev, { name: urlInput, type: "url" }]);
+        setUrlInput("");
       } else {
-        alert("URL upload failed");
+        const error = await res.text();
+        alert(`URL upload failed: ${error}`);
       }
     } catch (error) {
       console.error("URL upload error:", error);
@@ -125,16 +231,18 @@ function ChatInterface({ chatId }: { chatId: string }) {
     }
   };
 
-  const handleDeleteSource = async (fileName: string) => {
-    if (!confirm(`Delete ${fileName}?`)) return;
+  const handleDeleteSource = async (sourceName: string) => {
+    if (!confirm(`Delete "${sourceName}"?`)) return;
+
     try {
       const res = await fetch("/api/delete", {
         method: "POST",
-        body: JSON.stringify({ fileName, chatId }),
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: sourceName, chatId }),
       });
+
       if (res.ok) {
-        setUploadedFiles((prev) => prev.filter((f) => f !== fileName));
+        setSources((prev) => prev.filter((s) => s.name !== sourceName));
       } else {
         alert("Delete failed");
       }
@@ -144,245 +252,234 @@ function ChatInterface({ chatId }: { chatId: string }) {
     }
   };
 
-  const handleSend = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!input.trim()) return;
-
-    const userMessage = {
-      role: "user",
-      content: input,
-      parts: [{ type: "text", text: input }],
-    };
-
-    setIsLoading(true);
-    // @ts-ignore - Pass model in request options
-    await sendMessage(userMessage, {
-      body: { model: selectedModel },
-    });
-    setInput("");
-  };
+  const selectedModelData = AVAILABLE_MODELS.find(
+    (m) => m.id === selectedModel,
+  );
+  const isLoading = status === "streaming" || status === "submitted";
 
   return (
-    <div className="flex flex-1 overflow-hidden">
-      <div className="flex flex-col flex-1 h-full max-w-6xl mx-auto w-full p-4 lg:p-6 gap-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-          <div className="lg:col-span-1 flex flex-col gap-4 max-h-full overflow-y-auto">
-            <div className="bg-card rounded-2xl shadow-sm p-6 border border-border">
-              <h2 className="text-xl font-semibold mb-4 text-foreground">
-                Sources
-              </h2>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf"
-                onChange={(e) =>
-                  e.target.files?.[0] && handleFileUpload(e.target.files[0])
-                }
-                className="hidden"
-              />
-
-              <div className="space-y-4">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="w-full flex items-center justify-center gap-2 border border-border rounded-xl p-3 text-muted-foreground hover:bg-accent transition-all font-medium text-sm"
-                >
-                  {isUploading ? (
-                    <span>Uploading...</span>
-                  ) : (
-                    <>
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                        />
-                      </svg>
-                      <span>Upload PDF</span>
-                    </>
-                  )}
-                </button>
-
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    placeholder="Add URL source..."
-                    className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                    onKeyDown={async (e) => {
-                      if (e.key === "Enter") {
-                        const target = e.target as HTMLInputElement;
-                        if (target.value) {
-                          await handleUrlUpload(target.value);
-                          target.value = "";
-                        }
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={async () => {
-                      const input = document.querySelector(
-                        'input[type="url"]',
-                      ) as HTMLInputElement;
-                      if (input?.value) {
-                        await handleUrlUpload(input.value);
-                        input.value = "";
-                      }
-                    }}
-                    disabled={isUploading}
-                    className="bg-primary text-primary-foreground px-3 py-2 rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-2 max-h-[300px] overflow-y-auto">
-                {uploadedFiles.map((file, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between gap-2 p-2 bg-accent/50 rounded-lg text-sm text-foreground group"
-                  >
-                    <div className="flex items-center gap-2 truncate flex-1 leading-tight">
-                      {file.startsWith("http") ? (
-                        <svg
-                          className="w-4 h-4 text-blue-500 flex-shrink-0"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-                          />
-                        </svg>
-                      ) : (
-                        <svg
-                          className="w-4 h-4 text-red-500 flex-shrink-0"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" />
-                        </svg>
-                      )}
-                      <span className="truncate" title={file}>
-                        {file}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteSource(file)}
-                      className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                      title="Delete source"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
+    <div className="relative flex size-full flex-col divide-y overflow-hidden">
+      <Conversation>
+        <ConversationContent>
+          {messages.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
+              <p>No messages yet. Start the conversation!</p>
             </div>
-          </div>
-
-          <div className="lg:col-span-2 flex flex-col h-full bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
-                  <p>No messages yet. Start the conversation!</p>
-                </div>
-              )}
-              {messages.map((message) => (
-                <div
+          ) : (
+            messages.map((message) => {
+              const content = getMessageText(message);
+              return (
+                <Message
+                  from={message.role === "user" ? "user" : "assistant"}
                   key={message.id}
-                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"} animate-fadeIn`}
                 >
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                      message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-accent text-foreground"
-                    }`}
-                  >
-                    {/* @ts-ignore */}
-                    {message.parts
-                      ? message.parts.map((part, i) => {
-                          if (part.type === "text") {
-                            return (
-                              <div
-                                key={`${message.id}-${i}`}
-                                className="whitespace-pre-wrap"
-                              >
-                                {part.text}
-                              </div>
-                            );
-                          }
-                          return null;
-                        })
-                      : null}
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-accent rounded-2xl px-4 py-3 text-foreground">
-                    Typing...
-                  </div>
-                </div>
-              )}
-            </div>
+                  <MessageContent className="text-base">
+                    {message.role === "assistant" ? (
+                      <MessageResponse>{content}</MessageResponse>
+                    ) : (
+                      content
+                    )}
+                  </MessageContent>
+                  {message.role === "assistant" && (
+                    <MessageToolbar>
+                      <MessageActions>
+                        <MessageAction
+                          label="Copy"
+                          onClick={() => handleCopy(content)}
+                          tooltip="Copy to clipboard"
+                        >
+                          <CopyIcon className="size-4" />
+                        </MessageAction>
+                      </MessageActions>
+                    </MessageToolbar>
+                  )}
+                </Message>
+              );
+            })
+          )}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
 
-            <form
-              onSubmit={handleSend}
-              className="p-4 border-t border-border"
-            >
-              <div className="flex gap-2 items-center">
-                <input
-                  className="flex-1 px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
-                  value={input}
-                  placeholder="Type a message..."
-                  onChange={(e) => setInput(e.target.value)}
-                  disabled={isLoading}
-                />
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="px-3 py-3 bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm"
-                  disabled={isLoading}
-                >
-                  {AVAILABLE_MODELS.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="submit"
-                  disabled={isLoading || !input.trim()}
-                  className="px-6 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                >
-                  Send
-                </button>
-              </div>
-            </form>
-          </div>
+      <div className="grid shrink-0 gap-4 pt-4">
+        <div className="w-full px-4 pb-4">
+          <PromptInputProvider>
+            <PromptInput onSubmit={handleSend}>
+              <PromptInputBody>
+                <PromptInputTextarea />
+              </PromptInputBody>
+              <PromptInputFooter>
+                <PromptInputTools>
+                  <Sheet open={sourcesOpen} onOpenChange={setSourcesOpen}>
+                    <SheetTrigger asChild>
+                      <PromptInputButton>
+                        <FolderIcon className="size-4" />
+                        <span>Sources</span>
+                        {sources.length > 0 && (
+                          <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
+                            {sources.length}
+                          </span>
+                        )}
+                      </PromptInputButton>
+                    </SheetTrigger>
+                    <SheetContent>
+                      <SheetHeader>
+                        <SheetTitle>Sources</SheetTitle>
+                      </SheetHeader>
+                      <div className="mt-6 flex flex-col gap-4">
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading}
+                            className="flex-1"
+                          >
+                            {isUploading ? (
+                              <Loader2Icon className="mr-2 size-4 animate-spin" />
+                            ) : (
+                              <FileIcon className="mr-2 size-4" />
+                            )}
+                            Upload PDF
+                          </Button>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".pdf"
+                            onChange={handleFileUpload}
+                            className="hidden"
+                          />
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Enter URL..."
+                            value={urlInput}
+                            onChange={(e) => setUrlInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleUrlUpload();
+                              }
+                            }}
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={handleUrlUpload}
+                            disabled={isUploading || !urlInput.trim()}
+                          >
+                            {isUploading ? (
+                              <Loader2Icon className="size-4 animate-spin" />
+                            ) : (
+                              <PlusIcon className="size-4" />
+                            )}
+                          </Button>
+                        </div>
+
+                        <div className="mt-4">
+                          <h4 className="mb-2 text-sm font-medium text-muted-foreground">
+                            {sources.length === 0
+                              ? "No sources added yet"
+                              : `${sources.length} source${sources.length > 1 ? "s" : ""}`}
+                          </h4>
+                          <div className="flex flex-col gap-2">
+                            {sources.map((source) => (
+                              <div
+                                key={source.name}
+                                className="flex items-center justify-between rounded-lg border p-3"
+                              >
+                                <div className="flex min-w-0 items-center gap-2">
+                                  {source.type === "pdf" ? (
+                                    <FileIcon className="size-4 shrink-0 text-red-500" />
+                                  ) : (
+                                    <LinkIcon className="size-4 shrink-0 text-blue-500" />
+                                  )}
+                                  <span className="truncate text-sm">
+                                    {source.name}
+                                  </span>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() =>
+                                    handleDeleteSource(source.name)
+                                  }
+                                  className="shrink-0"
+                                >
+                                  <Trash2Icon className="size-4 text-destructive" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+
+                  <ModelSelector
+                    onOpenChange={setModelSelectorOpen}
+                    open={modelSelectorOpen}
+                  >
+                    <ModelSelectorTrigger asChild>
+                      <PromptInputButton>
+                        {selectedModelData?.provider && (
+                          <ModelSelectorLogo
+                            provider={selectedModelData.provider.toLowerCase()}
+                          />
+                        )}
+                        {selectedModelData?.name && (
+                          <ModelSelectorName>
+                            {selectedModelData.name}
+                          </ModelSelectorName>
+                        )}
+                      </PromptInputButton>
+                    </ModelSelectorTrigger>
+                    <ModelSelectorContent>
+                      <ModelSelectorInput placeholder="Search models..." />
+                      <ModelSelectorList>
+                        <ModelSelectorEmpty>
+                          No models found.
+                        </ModelSelectorEmpty>
+                        {Array.from(
+                          new Set(AVAILABLE_MODELS.map((m) => m.provider)),
+                        ).map((provider) => (
+                          <ModelSelectorGroup heading={provider} key={provider}>
+                            {AVAILABLE_MODELS.filter(
+                              (m) => m.provider === provider,
+                            ).map((m) => (
+                              <ModelSelectorItem
+                                key={m.id}
+                                onSelect={() => {
+                                  setSelectedModel(m.id);
+                                  setModelSelectorOpen(false);
+                                }}
+                                value={m.id}
+                              >
+                                <ModelSelectorLogo
+                                  provider={m.provider.toLowerCase()}
+                                />
+                                <ModelSelectorName>{m.name}</ModelSelectorName>
+                                <ModelSelectorLogoGroup>
+                                  <ModelSelectorLogo
+                                    provider={m.provider.toLowerCase()}
+                                  />
+                                </ModelSelectorLogoGroup>
+                                {selectedModel === m.id ? (
+                                  <CheckIcon className="ml-auto size-4" />
+                                ) : (
+                                  <div className="ml-auto size-4" />
+                                )}
+                              </ModelSelectorItem>
+                            ))}
+                          </ModelSelectorGroup>
+                        ))}
+                      </ModelSelectorList>
+                    </ModelSelectorContent>
+                  </ModelSelector>
+                </PromptInputTools>
+                <PromptInputSubmit status={isLoading ? "streaming" : "ready"} />
+              </PromptInputFooter>
+            </PromptInput>
+          </PromptInputProvider>
         </div>
       </div>
     </div>
