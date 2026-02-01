@@ -22,11 +22,13 @@ function getEmbeddings() {
 }
 
 const QDRANT_URL = process.env.QDRANT_URL || "http://localhost:6333";
-
+const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
+console.log("Qdrant URL: ", QDRANT_URL);
 export async function getVectorStore(collectionName: string = "default") {
   const embeddings = getEmbeddings();
   return await QdrantVectorStore.fromExistingCollection(embeddings, {
     url: QDRANT_URL,
+    apiKey: QDRANT_API_KEY,
     collectionName: collectionName,
   });
 }
@@ -64,6 +66,7 @@ export async function embedPDF(
 
     await QdrantVectorStore.fromDocuments(processedDocs, embeddings, {
       url: QDRANT_URL,
+      apiKey: QDRANT_API_KEY,
       collectionName: collectionName,
     });
 
@@ -107,6 +110,7 @@ export async function embedURL(
 
     await QdrantVectorStore.fromDocuments(processedDocs, embeddings, {
       url: QDRANT_URL,
+      apiKey: QDRANT_API_KEY,
       collectionName: collectionName,
     });
 
@@ -128,6 +132,7 @@ export async function deletePointFromCollection(
       embeddings,
       {
         url: QDRANT_URL,
+        apiKey: QDRANT_API_KEY,
         collectionName: collectionName,
       },
     );
